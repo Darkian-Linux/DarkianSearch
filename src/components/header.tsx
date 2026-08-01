@@ -12,12 +12,14 @@ import { cn } from "@/lib/utils";
 export function Header() {
   const pathname = usePathname();
   const onSearch = pathname?.startsWith("/search") ?? false;
+  const onHistory = pathname?.startsWith("/history") ?? false;
+  const flat = onSearch || onHistory;
 
   return (
     <header
       className={cn(
         "flex items-center",
-        onSearch
+        flat
           ? "relative z-10 border-b border-border p-3 sm:p-4"
           : "absolute inset-x-0 top-0 items-start p-4"
       )}
@@ -38,6 +40,15 @@ export function Header() {
           <div className="flex w-1/3 items-center justify-end gap-1">
             <HomeButton />
             <HistoryButton />
+            <ThemeToggle />
+          </div>
+        </>
+      ) : onHistory ? (
+        <>
+          <SystemClock />
+          <div className="flex items-center gap-1">
+            <HomeButton />
+            <HistoryButton disabled />
             <ThemeToggle />
           </div>
         </>
