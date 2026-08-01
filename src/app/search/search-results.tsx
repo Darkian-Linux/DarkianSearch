@@ -7,6 +7,8 @@ import {
   Newspaper,
   ShoppingBag,
   Loader2,
+  X,
+  ExternalLink,
 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -24,6 +26,21 @@ const CATEGORIES: { key: SearchCategory; label: string; icon: typeof Globe }[] =
   { key: "shopping", label: "Shopping", icon: ShoppingBag },
 ];
 
+function hostname(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
+function favicon(url: string): string {
+  const d = hostname(url);
+  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(
+    d
+  )}&sz=64`;
+}
+
 export function SearchResults() {
   const sp = useSearchParams();
   const q = sp.get("q") ?? "";
@@ -35,6 +52,15 @@ export function SearchResults() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
+  const [lightbox, setLightbox] = useState<SearchResult | null>(null);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setLightbox(null);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const doFetch = useCallback(
     async (targetPage: number, signal: AbortSignal) => {
@@ -61,6 +87,7 @@ export function SearchResults() {
     setPage(0);
     setLoading(true);
     setError(null);
+    setLightbox(null);
     const controller = new AbortController();
     doFetch(0, controller.signal)
       .catch((e) => {
@@ -140,10 +167,11 @@ export function SearchResults() {
           {cat === "images" ? (
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {results.map((r, i) => (
-                <a
+                <button
                   key={i}
-                  href={r.url}
-                  className="group overflow-hidden rounded-lg border border-border bg-card"
+                  type="button"
+                  onClick={() => setLightbox(r)}
+                  className="group overflow-hidden rounded-lg border border-border bg-card text-left focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <div className="flex h-36 items-center justify-center overflow-hidden bg-muted sm:h-40">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -157,25 +185,32 @@ export function SearchResults() {
                   <p className="line-clamp-2 p-2.5 text-xs font-medium text-card-foreground">
                     {r.title}
                   </p>
-                </a>
+                </button>
               ))}
             </div>
           ) : (
-            <div className="space-y-6">
+            <div className="space-y-7">
               {results.map((r, i) => (
                 <div key={i}>
+                  <div className="mb-0.5 flex items-center gap-2">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={favicon(r.url)}
+                      alt=""
+                      className="h-5 w-5 rounded-full"
+                      loading="lazy"
+                    />
+                    <span className="truncate text-sm text-emerald-700 dark:text-emerald-400">
+                      {hostname(r.url)}
+                    </span>
+                  </div>
                   <a href={r.url} className="group block">
-                    <p className="truncate text-xs text-muted-foreground">
-                      {r.url.replace(/^https?:\/\//, "")}
-                    </p>
-                    <h2 className="mt-0.5 text-lg font-medium leading-snug text-foreground group-hover:text-primary group-hover:underline">
+                    <h2 className="text-[17px] leading-snug font-medium text-primary group-hover:underline">
                       {r.title}
                     </h2>
-                    {r.snippet && (
-                      <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-                        {r.snippet}
-                      </p>
-                    )}
+                    <p className="mt-1 text-sm leading-relaxed text-foreground/90">
+                      {r.snippet}
+                    </p>
                   </a>
                 </div>
               ))}
@@ -195,6 +230,50 @@ export function SearchResults() {
               </Button>
             </div>
           )}
+        </div>
+      )}
+
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          onClick={() => setLightbox(null)}
+        >
+          <div
+            className="relative flex max-h-full max-w-3xl flex-col overflow-hidden rounded-xl bg-card"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-4 p-3">
+              <p className="line-clamp-1 text-sm font-medium">{lightbox.title}</p>
+              <div className="flex shrink-0 items-center gap-1">
+                <Button variant="ghost" size="icon" asChild>
+                  <a
+                    href={lightbox.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="Open source page"
+                  >
+                    <ExternalLink className="h-5 w-5" />
+                  </a>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setLightbox(null)}
+                  aria-label="Close"
+                >
+                  <X className="h-5 w-5" />
+                </Button>
+              </div>
+            </div>
+            <div className="flex items-center justify-center overflow-hidden bg-black">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={lightbox.thumbnail || lightbox.url}
+                alt={lightbox.title}
+                className="max-h-[70vh] max-w-full object-contain"
+              />
+            </div>
+          </div>
         </div>
       )}
     </div>
