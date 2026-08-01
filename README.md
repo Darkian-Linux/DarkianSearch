@@ -58,11 +58,3 @@ src/
     search.ts             # per-category DuckDuckGo scrapers
     utils.ts              # cn() helper
 ```
-
-## Deploy on Vercel
-
-Push to GitHub, then import the repo at [vercel.com/new](https://vercel.com/new). No environment variables needed.
-
-## License
-
-MIT
