@@ -192,7 +192,10 @@ export function SearchResults() {
             <div className="space-y-7">
               {results.map((r, i) => (
                 <div key={i}>
-                  <div className="mb-0.5 flex items-center gap-2">
+                  <a
+                    href={r.url}
+                    className="mb-0.5 flex items-center gap-2"
+                  >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={favicon(r.url)}
@@ -203,15 +206,17 @@ export function SearchResults() {
                     <span className="truncate text-sm text-emerald-700 dark:text-emerald-400">
                       {hostname(r.url)}
                     </span>
-                  </div>
-                  <a href={r.url} className="group block">
-                    <h2 className="text-[17px] leading-snug font-medium text-primary group-hover:underline">
+                  </a>
+                  <a href={r.url} className="block">
+                    <h2 className="text-[17px] leading-snug font-medium text-primary hover:underline">
                       {r.title}
                     </h2>
+                  </a>
+                  {r.snippet && (
                     <p className="mt-1 text-sm leading-relaxed text-foreground/90">
                       {r.snippet}
                     </p>
-                  </a>
+                  )}
                 </div>
               ))}
             </div>

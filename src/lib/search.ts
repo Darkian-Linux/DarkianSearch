@@ -245,7 +245,7 @@ function serperKey(cat: SearchCategory): string {
 }
 
 const SERPER_PAGE_SIZE: Record<SearchCategory, number> = {
-  all: 10,
+  all: 20,
   images: 20,
   videos: 10,
   news: 10,
@@ -291,7 +291,7 @@ async function serperSearch(
   }
   const data = (await res.json()) as Record<string, unknown>;
   const results = serperResults(cat, data);
-  const hasMore = results.length >= pageSize;
+  const hasMore = results.length > 0;
   return { results, hasMore };
 }
 
