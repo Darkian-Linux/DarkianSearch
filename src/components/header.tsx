@@ -1,20 +1,40 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { HomeButton } from "@/components/home-button";
 import { SystemClock } from "@/components/system-clock";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { cn } from "@/lib/utils";
 
 export function Header() {
   const pathname = usePathname();
-  const showHome = pathname?.startsWith("/search") ?? false;
+  const onSearch = pathname?.startsWith("/search") ?? false;
 
   return (
-    <header className="absolute inset-x-0 top-0 flex items-start justify-between p-4">
-      <SystemClock />
-      <div className="flex items-center gap-1">
-        {showHome && <HomeButton />}
+    <header
+      className={cn(
+        "flex items-center justify-between",
+        onSearch
+          ? "relative z-10 border-b border-border p-3 sm:p-4"
+          : "absolute inset-x-0 top-0 items-start p-4"
+      )}
+    >
+      {onSearch ? (
+        <Link
+          href="/"
+          className="flex items-center gap-2 text-base font-bold tracking-tight text-primary sm:text-lg"
+        >
+          Darkian
+          <span className="text-foreground">Search</span>
+        </Link>
+      ) : (
+        <SystemClock />
+      )}
+
+      <div className="flex shrink-0 items-center gap-1">
+        {onSearch && <HomeButton />}
         <ThemeToggle />
       </div>
     </header>
