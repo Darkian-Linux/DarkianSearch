@@ -45,19 +45,22 @@ export function Header() {
         </>
       ) : onHistory ? (
         <>
-          <SystemClock />
-          <div className="flex items-center gap-1">
-            <HomeButton />
-            <HistoryButton disabled />
-            <ThemeToggle />
+          <div className="flex flex-1 items-center justify-between">
+            <SystemClock />
+            <div className="flex items-center gap-1">
+              <HomeButton />
+              <ThemeToggle />
+            </div>
           </div>
         </>
       ) : (
         <>
-          <SystemClock />
-          <div className="flex items-center gap-1">
-            <HistoryButton />
-            <ThemeToggle />
+          <div className="flex flex-1 items-center justify-between">
+            <SystemClock />
+            <div className="flex items-center gap-1">
+              <HistoryButton />
+              <ThemeToggle />
+            </div>
           </div>
         </>
       )}
