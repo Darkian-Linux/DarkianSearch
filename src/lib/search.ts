@@ -252,6 +252,28 @@ const SERPER_PAGE_SIZE: Record<SearchCategory, number> = {
   shopping: 40,
 };
 
+async function serperCall(
+  endpoint: string,
+  body: Record<string, unknown>,
+  signal?: AbortSignal
+): Promise<Record<string, unknown>> {
+  const res = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-API-KEY": SERPER_KEY as string,
+    },
+    body: JSON.stringify(body),
+    signal,
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`Serper HTTP ${res.status} ${detail.slice(0, 200)}`);
+  }
+  return (await res.json()) as Record<string, unknown>;
+}
+
 async function serperSearch(
   q: string,
   cat: SearchCategory,
@@ -275,21 +297,25 @@ async function serperSearch(
     page: page + 1,
   };
 
-  const res = await fetch(endpoints[cat], {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-API-KEY": SERPER_KEY,
-    },
-    body: JSON.stringify(body),
-    signal,
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    const detail = await res.text().catch(() => "");
-    throw new Error(`Serper HTTP ${res.status} ${detail.slice(0, 200)}`);
+  // First page of "all" should show 16 results, but Serper caps organic
+  // around ~10 per request, so fetch two pages and merge unique results.
+  if (cat === "all" && page === 0) {
+    const [d1, d2] = await Promise.all([
+      serperCall(endpoints[cat], { ...body }, signal),
+      serperCall(endpoints[cat], { ...body, page: 2 }, signal),
+    ]);
+    const seen = new Set<string>();
+    const results = [...serperResults(cat, d1), ...serperResults(cat, d2)]
+      .filter((r) => {
+        if (seen.has(r.url)) return false;
+        seen.add(r.url);
+        return true;
+      })
+      .slice(0, 16);
+    return { results, hasMore: results.length > 0 };
   }
-  const data = (await res.json()) as Record<string, unknown>;
+
+  const data = await serperCall(endpoints[cat], body, signal);
   const results = serperResults(cat, data);
   const hasMore = results.length > 0;
   return { results, hasMore };

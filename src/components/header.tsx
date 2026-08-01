@@ -16,29 +16,40 @@ export function Header() {
   return (
     <header
       className={cn(
-        "flex items-center justify-between",
+        "flex items-center",
         onSearch
           ? "relative z-10 border-b border-border p-3 sm:p-4"
           : "absolute inset-x-0 top-0 items-start p-4"
       )}
     >
       {onSearch ? (
-        <Link
-          href="/"
-          className="flex items-center gap-2 text-base font-bold tracking-tight text-primary sm:text-lg"
-        >
-          Darkian
-          <span className="text-foreground">Search</span>
-        </Link>
+        <>
+          <div className="flex w-1/3 items-center justify-start">
+            <SystemClock />
+          </div>
+          <div className="flex w-1/3 items-center justify-center">
+            <Link
+              href="/"
+              className="text-base font-bold tracking-tight sm:text-lg"
+            >
+              Darkian<span className="text-primary">Search</span>
+            </Link>
+          </div>
+          <div className="flex w-1/3 items-center justify-end gap-1">
+            <HomeButton />
+            <HistoryButton />
+            <ThemeToggle />
+          </div>
+        </>
       ) : (
-        <SystemClock />
+        <>
+          <SystemClock />
+          <div className="flex items-center gap-1">
+            <HistoryButton />
+            <ThemeToggle />
+          </div>
+        </>
       )}
-
-      <div className="flex shrink-0 items-center gap-1">
-        <HistoryButton />
-        {onSearch && <HomeButton />}
-        <ThemeToggle />
-      </div>
     </header>
   );
 }
