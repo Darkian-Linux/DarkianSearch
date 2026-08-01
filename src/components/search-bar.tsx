@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { addHistory, getHistory, type HistoryEntry } from "@/lib/history";
+import { addHistory, getHistory, removeHistory, type HistoryEntry } from "@/lib/history";
 
 export function SearchBar({
   defaultValue = "",
@@ -105,17 +105,27 @@ export function SearchBar({
             <ul className="max-h-64 overflow-y-auto py-1">
               {recent.map((h) => (
                 <li key={`${h.query}-${h.timestamp}`}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setValue(h.query);
-                      go(h.query);
-                    }}
-                    className="flex w-full items-center gap-3 px-4 py-2 text-left text-sm text-foreground hover:bg-muted"
-                  >
-                    <Clock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                    <span className="truncate">{h.query}</span>
-                  </button>
+                  <div className="group/item flex w-full items-center gap-1 px-2 py-1 hover:bg-muted">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setValue(h.query);
+                        go(h.query);
+                      }}
+                      className="flex min-w-0 flex-1 items-center gap-3 py-1 text-left text-sm text-foreground"
+                    >
+                      <Clock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      <span className="truncate">{h.query}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRecent(removeHistory(h.query))}
+                      aria-label={`Remove ${h.query} from history`}
+                      className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted-foreground/20 hover:text-foreground sm:opacity-0 sm:transition-opacity sm:group-hover/item:opacity-100"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </li>
               ))}
             </ul>

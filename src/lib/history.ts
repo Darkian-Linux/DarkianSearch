@@ -50,3 +50,27 @@ export function clearHistory(): void {
     // ignore
   }
 }
+
+function save(history: HistoryEntry[]): void {
+  if (!isClient()) return;
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+  } catch {
+    // storage full or unavailable
+  }
+}
+
+export function removeHistory(query: string): HistoryEntry[] {
+  const history = getHistory().filter(
+    (h) => h.query.toLowerCase() !== query.trim().toLowerCase()
+  );
+  save(history);
+  return history;
+}
+
+export function removeHistoryMany(queries: string[]): HistoryEntry[] {
+  const lower = new Set(queries.map((q) => q.trim().toLowerCase()));
+  const history = getHistory().filter((h) => !lower.has(h.query.toLowerCase()));
+  save(history);
+  return history;
+}

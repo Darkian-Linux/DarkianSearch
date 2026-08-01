@@ -1,11 +1,18 @@
 "use client";
 
-import { Clock, Search, Trash2 } from "lucide-react";
+import { Clock, Search, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { clearHistory, getHistory, type HistoryEntry } from "@/lib/history";
+import {
+  clearHistory,
+  getHistory,
+  removeHistory,
+  removeHistoryMany,
+  type HistoryEntry,
+} from "@/lib/history";
+import { cn } from "@/lib/utils";
 
 function formatDate(ts: number): string {
   return new Date(ts).toLocaleString(undefined, {
@@ -17,7 +24,9 @@ function formatDate(ts: number): string {
   });
 }
 
-function groupByDay(entries: HistoryEntry[]): { label: string; items: HistoryEntry[] }[] {
+function groupByDay(
+  entries: HistoryEntry[]
+): { label: string; items: HistoryEntry[] }[] {
   const groups: { label: string; items: HistoryEntry[] }[] = [];
   for (const e of entries) {
     const label = new Date(e.timestamp).toLocaleDateString(undefined, {
@@ -38,10 +47,46 @@ function groupByDay(entries: HistoryEntry[]): { label: string; items: HistoryEnt
 
 export default function HistoryPage() {
   const [history, setHistory] = useState<HistoryEntry[]>(() => getHistory());
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
-  function handleClear() {
+  const toggle = (query: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(query)) {
+        next.delete(query);
+      } else {
+        next.add(query);
+      }
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (selected.size === history.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(history.map((h) => h.query)));
+    }
+  };
+
+  function removeOne(query: string) {
+    setHistory(removeHistory(query));
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.delete(query);
+      return next;
+    });
+  }
+
+  function removeSelected() {
+    setHistory(removeHistoryMany([...selected]));
+    setSelected(new Set());
+  }
+
+  function clearAll() {
     clearHistory();
     setHistory([]);
+    setSelected(new Set());
   }
 
   return (
@@ -50,18 +95,36 @@ export default function HistoryPage() {
         <div className="flex items-center gap-3">
           <Clock className="h-6 w-6 text-primary" />
           <h1 className="text-2xl font-bold tracking-tight">History</h1>
+          {selected.size > 0 && (
+            <span className="text-sm text-muted-foreground">
+              {selected.size} selected
+            </span>
+          )}
         </div>
-        {history.length > 0 && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleClear}
-            className="gap-1.5 rounded-full"
-          >
-            <Trash2 className="h-4 w-4" />
-            Clear all
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {selected.size > 0 && (
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={removeSelected}
+              className="gap-1.5 rounded-full"
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete
+            </Button>
+          )}
+          {history.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={clearAll}
+              className="gap-1.5 rounded-full"
+            >
+              <Trash2 className="h-4 w-4" />
+              Clear all
+            </Button>
+          )}
+        </div>
       </div>
 
       {history.length === 0 ? (
@@ -75,30 +138,68 @@ export default function HistoryPage() {
         </div>
       ) : (
         <div className="space-y-6">
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={toggleAll}
+              className="gap-1.5 rounded-full text-sm text-muted-foreground"
+            >
+              <input
+                type="checkbox"
+                checked={history.length > 0 && selected.size === history.length}
+                onChange={toggleAll}
+                className="h-4 w-4 accent-primary"
+              />
+              Select all
+            </Button>
+          </div>
           {groupByDay(history).map((group) => (
             <div key={group.label}>
               <h2 className="mb-2 text-sm font-semibold text-muted-foreground">
                 {group.label}
               </h2>
               <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
-                {group.items.map((h) => (
-                  <li key={`${h.query}-${h.timestamp}`}>
-                    <Link
-                      href={`/search?q=${encodeURIComponent(h.query)}`}
-                      className="group flex items-center justify-between gap-4 px-4 py-3 transition-colors hover:bg-muted"
+                {group.items.map((h) => {
+                  const isSelected = selected.has(h.query);
+                  return (
+                    <li
+                      key={`${h.query}-${h.timestamp}`}
+                      className={cn(
+                        "flex items-center gap-3 px-4 py-3 transition-colors",
+                        isSelected && "bg-muted"
+                      )}
                     >
-                      <span className="flex min-w-0 items-center gap-3">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggle(h.query)}
+                        aria-label={`Select ${h.query}`}
+                        className="h-4 w-4 shrink-0 accent-primary"
+                      />
+                      <Link
+                        href={`/search?q=${encodeURIComponent(h.query)}`}
+                        className="flex min-w-0 flex-1 items-center gap-3"
+                      >
                         <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
-                        <span className="truncate font-medium group-hover:text-primary">
+                        <span className="truncate font-medium hover:text-primary">
                           {h.query}
                         </span>
-                      </span>
-                      <span className="shrink-0 text-xs text-muted-foreground">
+                      </Link>
+                      <span className="hidden shrink-0 text-xs text-muted-foreground sm:block">
                         {formatDate(h.timestamp)}
                       </span>
-                    </Link>
-                  </li>
-                ))}
+                      <button
+                        type="button"
+                        onClick={() => removeOne(h.query)}
+                        aria-label={`Remove ${h.query} from history`}
+                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted-foreground/20 hover:text-foreground"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           ))}
