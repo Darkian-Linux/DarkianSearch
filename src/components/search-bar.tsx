@@ -1,6 +1,6 @@
 "use client";
 
-import { Search, X } from "lucide-react";
+import { ArrowUp, Search, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -52,14 +52,14 @@ export function SearchBar({
       </div>
       <Button
         type="submit"
+        aria-label="Search"
         className={
           large
-            ? "h-14 rounded-full px-5 text-base sm:px-8"
-            : "h-11 rounded-full px-4 sm:px-6"
+            ? "h-14 w-14 shrink-0 rounded-full"
+            : "h-11 w-11 shrink-0 rounded-full"
         }
       >
-        <Search className="h-4 w-4 sm:hidden" />
-        <span className="hidden sm:inline">Search</span>
+        <ArrowUp className="h-5 w-5" />
       </Button>
     </form>
   );
