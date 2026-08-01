@@ -10,6 +10,7 @@ export type SearchResult = {
   url: string;
   snippet: string;
   thumbnail?: string;
+  image?: string;
 };
 
 export type SearchResponse = {
@@ -24,6 +25,8 @@ type TavilyResult = Record<string, unknown> & {
   published_date?: string;
   images?: string[];
 };
+
+const SERPER_KEY = process.env.SERPER_API_KEY;
 
 async function tavilySearch(
   query: string,
@@ -105,7 +108,7 @@ function newsResults(items: TavilyResult[]): SearchResult[] {
   }));
 }
 
-export async function search(
+async function tavilySearchCompat(
   q: string,
   cat: SearchCategory,
   page: number,
@@ -122,7 +125,7 @@ export async function search(
     }
     case "videos": {
       const items = await tavilySearch(
-        `${q}`,
+        q,
         "general",
         10,
         false,
@@ -133,24 +136,171 @@ export async function search(
       return { results, hasMore: false };
     }
     case "news": {
-      const items = await tavilySearch(q, "news", offset + pageSize + 1, false, signal);
+      const items = await tavilySearch(
+        q,
+        "news",
+        offset + pageSize + 1,
+        false,
+        signal
+      );
       const all = newsResults(items);
       const results = all.slice(offset, offset + pageSize);
       return { results, hasMore: results.length === pageSize };
     }
     case "shopping": {
-      const items = await tavilySearch(q, "general", offset + pageSize + 1, true, signal);
+      const items = await tavilySearch(
+        q,
+        "general",
+        offset + pageSize + 1,
+        true,
+        signal
+      );
       const all = webResults(items);
       const results = all.slice(offset, offset + pageSize);
       return { results, hasMore: results.length === pageSize };
     }
     default: {
-      const items = await tavilySearch(q, "general", offset + pageSize + 1, false, signal);
+      const items = await tavilySearch(
+        q,
+        "general",
+        offset + pageSize + 1,
+        false,
+        signal
+      );
       const all = webResults(items);
       const results = all.slice(offset, offset + pageSize);
       return { results, hasMore: results.length === pageSize };
     }
   }
+}
+
+type SerperItem = {
+  title?: string;
+  link?: string;
+  snippet?: string;
+  date?: string;
+  source?: string;
+  price?: string;
+  channel?: string;
+  imageUrl?: string;
+  thumbnailUrl?: string;
+  domain?: string;
+};
+
+function serperResults(cat: SearchCategory, data: Record<string, unknown>): SearchResult[] {
+  const items = (data[serperKey(cat)] ?? []) as SerperItem[];
+
+  switch (cat) {
+    case "images":
+      return items.map((r) => ({
+        title: r.title ?? r.source ?? "",
+        url: r.link ?? "",
+        snippet: r.source ?? r.domain ?? "",
+        thumbnail: r.thumbnailUrl ?? r.imageUrl,
+        image: r.imageUrl ?? r.thumbnailUrl,
+      }));
+    case "videos":
+      return items.map((r) => ({
+        title: r.title ?? "",
+        url: r.link ?? "",
+        snippet: [r.channel, r.date].filter(Boolean).join(" · "),
+        thumbnail: r.imageUrl,
+      }));
+    case "news":
+      return items.map((r) => ({
+        title: r.title ?? "",
+        url: r.link ?? "",
+        snippet: r.snippet ?? "",
+        thumbnail: r.imageUrl,
+      }));
+    case "shopping":
+      return items.map((r) => ({
+        title: r.title ?? "",
+        url: r.link ?? "",
+        snippet: [r.price, r.source].filter(Boolean).join(" · "),
+        thumbnail: r.imageUrl ?? r.thumbnailUrl,
+      }));
+    default:
+      return items.map((r) => ({
+        title: r.title ?? "",
+        url: r.link ?? "",
+        snippet: r.snippet ?? "",
+      }));
+  }
+}
+
+function serperKey(cat: SearchCategory): string {
+  switch (cat) {
+    case "images":
+      return "images";
+    case "videos":
+      return "videos";
+    case "news":
+      return "news";
+    case "shopping":
+      return "shopping";
+    default:
+      return "organic";
+  }
+}
+
+async function serperSearch(
+  q: string,
+  cat: SearchCategory,
+  page: number,
+  signal?: AbortSignal
+): Promise<SearchResponse> {
+  if (!SERPER_KEY) throw new Error("SERPER_API_KEY not set");
+
+  const endpoints: Record<SearchCategory, string> = {
+    all: "https://google.serper.dev/search",
+    images: "https://google.serper.dev/images",
+    videos: "https://google.serper.dev/videos",
+    news: "https://google.serper.dev/news",
+    shopping: "https://google.serper.dev/shopping",
+  };
+
+  const body: Record<string, unknown> = { q };
+  if (cat === "all") {
+    body.num = 10;
+    body.page = page + 1;
+  }
+
+  const res = await fetch(endpoints[cat], {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-API-KEY": SERPER_KEY,
+    },
+    body: JSON.stringify(body),
+    signal,
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`Serper HTTP ${res.status} ${detail.slice(0, 200)}`);
+  }
+  const data = (await res.json()) as Record<string, unknown>;
+  const results = serperResults(cat, data);
+  const hasMore =
+    cat === "all" ? results.length === 10 : results.length > 0;
+  return { results, hasMore };
+}
+
+export async function search(
+  q: string,
+  cat: SearchCategory,
+  page: number,
+  signal?: AbortSignal
+): Promise<SearchResponse> {
+  if (SERPER_KEY) {
+    try {
+      return await serperSearch(q, cat, page, signal);
+    } catch (e) {
+      console.warn("Serper search failed, falling back to Tavily:", e);
+    }
+  }
+  return tavilySearchCompat(q, cat, page, signal);
 }
 
 export const CATEGORY_META: Record<

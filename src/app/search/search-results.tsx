@@ -268,7 +268,7 @@ export function SearchResults() {
             <div className="flex items-center justify-center overflow-hidden bg-black">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={lightbox.thumbnail || lightbox.url}
+                src={lightbox.image || lightbox.thumbnail || lightbox.url}
                 alt={lightbox.title}
                 className="max-h-[70vh] max-w-full object-contain"
               />
