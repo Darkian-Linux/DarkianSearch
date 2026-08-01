@@ -244,6 +244,14 @@ function serperKey(cat: SearchCategory): string {
   }
 }
 
+const SERPER_PAGE_SIZE: Record<SearchCategory, number> = {
+  all: 10,
+  images: 20,
+  videos: 10,
+  news: 10,
+  shopping: 40,
+};
+
 async function serperSearch(
   q: string,
   cat: SearchCategory,
@@ -260,11 +268,12 @@ async function serperSearch(
     shopping: "https://google.serper.dev/shopping",
   };
 
-  const body: Record<string, unknown> = { q };
-  if (cat === "all") {
-    body.num = 10;
-    body.page = page + 1;
-  }
+  const pageSize = SERPER_PAGE_SIZE[cat];
+  const body: Record<string, unknown> = {
+    q,
+    num: pageSize,
+    page: page + 1,
+  };
 
   const res = await fetch(endpoints[cat], {
     method: "POST",
@@ -282,8 +291,7 @@ async function serperSearch(
   }
   const data = (await res.json()) as Record<string, unknown>;
   const results = serperResults(cat, data);
-  const hasMore =
-    cat === "all" ? results.length === 10 : results.length > 0;
+  const hasMore = results.length >= pageSize;
   return { results, hasMore };
 }
 
