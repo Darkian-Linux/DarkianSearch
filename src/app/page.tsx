@@ -6,7 +6,7 @@ export default function Home() {
       <h1 className="mb-10 text-5xl font-bold tracking-tight sm:text-6xl">
         Darkian<span className="text-primary">Search</span>
       </h1>
-      <SearchBar large />
+      <SearchBar large showRecent />
     </div>
   );
 }

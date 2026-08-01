@@ -114,7 +114,7 @@ export function SearchResults() {
       <div className="flex flex-1 flex-col items-center justify-center gap-4 px-4">
         <p className="text-muted-foreground">Enter a query to search.</p>
         <div className="w-full max-w-2xl">
-          <SearchBar />
+          <SearchBar showRecent />
         </div>
       </div>
     );

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { HomeButton } from "@/components/home-button";
+import { HistoryButton } from "@/components/history-button";
 import { SystemClock } from "@/components/system-clock";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
@@ -34,6 +35,7 @@ export function Header() {
       )}
 
       <div className="flex shrink-0 items-center gap-1">
+        <HistoryButton />
         {onSearch && <HomeButton />}
         <ThemeToggle />
       </div>
