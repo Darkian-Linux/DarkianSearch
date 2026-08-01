@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
+import { Header } from "@/components/header";
 import { ThemeProvider } from "@/components/theme-provider";
-import { ThemeToggle } from "@/components/theme-toggle";
 
 import "./globals.css";
 
@@ -43,9 +43,7 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <header className="absolute top-0 right-0 flex items-center justify-end p-4">
-            <ThemeToggle />
-          </header>
+          <Header />
           <main className="flex flex-1 flex-col">{children}</main>
         </ThemeProvider>
       </body>

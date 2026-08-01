@@ -12,262 +12,154 @@ export type SearchResult = {
   thumbnail?: string;
 };
 
-const UA =
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
+export type SearchResponse = {
+  results: SearchResult[];
+  hasMore: boolean;
+};
 
-async function fetchText(url: string, signal?: AbortSignal): Promise<string> {
-  const res = await fetch(url, {
+type TavilyResult = Record<string, unknown> & {
+  title?: string;
+  url?: string;
+  content?: string;
+  published_date?: string;
+  images?: string[];
+};
+
+async function tavilySearch(
+  query: string,
+  topic: "general" | "news",
+  maxResults: number,
+  includeImages: boolean,
+  signal?: AbortSignal,
+  includeDomains?: string[]
+): Promise<TavilyResult[]> {
+  const res = await fetch("https://api.tavily.com/search", {
+    method: "POST",
     headers: {
-      "User-Agent": UA,
-      Accept:
-        "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-      "Accept-Language": "en-US,en;q=0.9",
-      "Cache-Control": "no-cache",
-      Pragma: "no-cache",
+      "Content-Type": "application/json",
+      "X-Tavily-Access-Mode": "keyless",
     },
+    body: JSON.stringify({
+      query,
+      topic,
+      max_results: maxResults,
+      include_images: includeImages,
+      include_domains: includeDomains,
+      search_depth: "basic",
+    }),
     signal,
     cache: "no-store",
   });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return await res.text();
-}
-
-function decodeHtml(s: string): string {
-  return s
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#x27;/g, "'")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
-    .replace(/<[^>]+>/g, "");
-}
-
-function extractUrl(raw: string): string {
-  const m = raw.match(/uddg=([^&]+)/);
-  if (m) {
-    try {
-      return decodeURIComponent(m[1]);
-    } catch {
-      return m[1];
-    }
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`Tavily HTTP ${res.status} ${detail.slice(0, 200)}`);
   }
-  return raw;
+  const data = (await res.json()) as { results?: TavilyResult[] };
+  return data.results ?? [];
 }
 
-async function tryEach<T>(
-  fns: ((signal?: AbortSignal) => Promise<T>)[],
-  signal?: AbortSignal
-): Promise<T> {
-  let lastErr: unknown = null;
-  for (const fn of fns) {
-    try {
-      const out = await fn(signal);
-      if (Array.isArray(out) && out.length === 0) {
-        lastErr = new Error("empty results");
-        continue;
-      }
-      return out;
-    } catch (e) {
-      lastErr = e;
-    }
-  }
-  throw lastErr instanceof Error ? lastErr : new Error("all providers failed");
+function webResults(items: TavilyResult[]): SearchResult[] {
+  return items.map((r) => ({
+    title: r.title ?? "",
+    url: r.url ?? "",
+    snippet: r.content ?? "",
+  }));
 }
 
-function parseDdgHtml(html: string, max = 12): SearchResult[] {
-  const results: SearchResult[] = [];
-  const re = /<div[^>]*class="result[^"]*"[^>]*>([\s\S]*?)(?=<div[^>]*class="result|$)/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(html)) !== null && results.length < max) {
-    const block = m[1];
-    const t = block.match(
-      /class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/
-    );
-    const s = block.match(/class="result__snippet"[^>]*>([\s\S]*?)<\/a>/);
-    if (!t) continue;
-    results.push({
-      title: decodeHtml(t[2]),
-      url: extractUrl(t[1]),
-      snippet: s ? decodeHtml(s[1]).trim() : "",
+function imageResults(items: TavilyResult[]): SearchResult[] {
+  const out: SearchResult[] = [];
+  for (const r of items) {
+    const urls = r.images ?? [];
+    if (urls.length === 0) continue;
+    out.push({
+      title: r.title ?? "",
+      url: r.url ?? "",
+      snippet: "",
+      thumbnail: urls[0],
     });
   }
-  return results;
+  return out;
 }
 
-function parseDdgLite(html: string, max = 12): SearchResult[] {
-  const results: SearchResult[] = [];
-  const re =
-    /<a[^>]*rel="nofollow"[^>]*href="([^"]+)"[^>]*>(?:<b>)?([\s\S]*?)(?:<\/b>)?<\/a>[\s\S]*?<td[^>]*class='result-snippet'[^>]*>([\s\S]*?)<\/td>/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(html)) !== null && results.length < max) {
-    results.push({
-      title: decodeHtml(m[2]).trim(),
-      url: extractUrl(m[1]),
-      snippet: decodeHtml(m[3]).trim(),
-    });
-  }
-  return results;
+function videoResults(items: TavilyResult[]): SearchResult[] {
+  return items.map((r) => {
+    const url = r.url ?? "";
+    const id = url.match(/[?&]v=([\w-]{6,})/)?.[1] ?? "";
+    const thumbnail = id
+      ? `https://i.ytimg.com/vi/${id}/hqdefault.jpg`
+      : undefined;
+    return {
+      title: r.title ?? "",
+      url,
+      snippet: r.content ?? "",
+      thumbnail,
+    };
+  });
 }
 
-function bingUrl(raw: string): string {
-  if (!raw.includes("bing.com/ck/a")) return raw;
-  const m = raw.match(/[?&]u=a1([^&]+)/);
-  if (!m) return raw;
-  try {
-    const pad = m[1].length % 4 === 0 ? "" : "=".repeat(4 - (m[1].length % 4));
-    return atob(m[1] + pad);
-  } catch {
-    return raw;
-  }
+function newsResults(items: TavilyResult[]): SearchResult[] {
+  return items.map((r) => ({
+    title: r.title ?? "",
+    url: r.url ?? "",
+    snippet: r.content ?? "",
+  }));
 }
 
-function parseBing(html: string, max = 12): SearchResult[] {
-  const results: SearchResult[] = [];
-  const re = /<li class="b_algo"[\s\S]*?<h2[^>]*><a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a><\/h2>[\s\S]*?(?:<p[^>]*>([\s\S]*?)<\/p>)?/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(html)) !== null && results.length < max) {
-    results.push({
-      title: decodeHtml(m[2]).trim(),
-      url: bingUrl(m[1]),
-      snippet: m[3] ? decodeHtml(m[3]).trim() : "",
-    });
-  }
-  return results;
-}
-
-const ddg = (q: string, extra = "") => (signal?: AbortSignal) =>
-  fetchText(
-    `https://html.duckduckgo.com/html/?q=${encodeURIComponent(q)}${extra}`,
-    signal
-  ).then((h) => parseDdgHtml(h));
-
-const lite = (q: string, extra = "") => (signal?: AbortSignal) =>
-  fetchText(
-    `https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(q)}${extra}`,
-    signal
-  ).then((h) => parseDdgLite(h));
-
-const bing = (q: string, extra = "") => (signal?: AbortSignal) =>
-  fetchText(
-    `https://www.bing.com/search?q=${encodeURIComponent(q)}${extra}`,
-    signal
-  ).then((h) => parseBing(h));
-
-export async function searchAll(
+export async function search(
   q: string,
+  cat: SearchCategory,
+  page: number,
   signal?: AbortSignal
-): Promise<SearchResult[]> {
-  return tryEach([ddg(q), lite(q), bing(q)], signal);
-}
+): Promise<SearchResponse> {
+  const pageSize = 10;
+  const offset = page * pageSize;
 
-export async function searchImages(
-  q: string,
-  signal?: AbortSignal
-): Promise<SearchResult[]> {
-  try {
-    const html = await fetchText(
-      `https://duckduckgo.com/?q=${encodeURIComponent(q)}&iax=images&ia=images`,
-      signal
-    );
-    const m = html.match(/vqd=([^&"]+)/);
-    if (m) {
-      const json = await fetchText(
-        `https://duckduckgo.com/i.js?l=us-en&o=json&q=${encodeURIComponent(
-          q
-        )}&vqd=${m[1]}`,
-        signal
+  switch (cat) {
+    case "images": {
+      const items = await tavilySearch(q, "general", 20, true, signal);
+      const results = imageResults(items);
+      return { results, hasMore: false };
+    }
+    case "videos": {
+      const items = await tavilySearch(
+        `${q}`,
+        "general",
+        10,
+        false,
+        signal,
+        ["youtube.com", "vimeo.com", "dailymotion.com", "youtube-nocookie.com"]
       );
-      const data = JSON.parse(json);
-      const results = (data.results ?? []).slice(0, 12).map((r: Record<string, string>) => ({
-        title: r.title ?? "",
-        url: r.image ?? "",
-        snippet: r.width ? `${r.width} × ${r.height}` : "",
-        thumbnail: r.thumbnail ?? r.image ?? "",
-      }));
-      if (results.length > 0) return results;
+      const results = videoResults(items);
+      return { results, hasMore: false };
     }
-  } catch {
-    // fall through to Bing
-  }
-  const html = await fetchText(
-    `https://www.bing.com/images/search?q=${encodeURIComponent(q)}`,
-    signal
-  );
-  const results: SearchResult[] = [];
-  const re =
-    /<a[^>]*class="iusc"[^>]*m="([^"]+)"[\s\S]*?<img[^>]*src="([^"]+)"/g;
-  let m2: RegExpExecArray | null;
-  while ((m2 = re.exec(html)) !== null && results.length < 12) {
-    try {
-      const meta = JSON.parse(m2[1]);
-      const t = /<h2[^>]*>([\s\S]*?)<\/h2>/.exec(html);
-      results.push({
-        title: meta.t ?? meta.m ?? (t ? decodeHtml(t[1]) : ""),
-        url: meta.purl ?? meta.murl ?? m2[2],
-        snippet: "",
-        thumbnail: m2[2],
-      });
-    } catch {
-      // skip malformed
+    case "news": {
+      const items = await tavilySearch(q, "news", offset + pageSize + 1, false, signal);
+      const all = newsResults(items);
+      const results = all.slice(offset, offset + pageSize);
+      return { results, hasMore: results.length === pageSize };
+    }
+    case "shopping": {
+      const items = await tavilySearch(q, "general", offset + pageSize + 1, true, signal);
+      const all = webResults(items);
+      const results = all.slice(offset, offset + pageSize);
+      return { results, hasMore: results.length === pageSize };
+    }
+    default: {
+      const items = await tavilySearch(q, "general", offset + pageSize + 1, false, signal);
+      const all = webResults(items);
+      const results = all.slice(offset, offset + pageSize);
+      return { results, hasMore: results.length === pageSize };
     }
   }
-  return results;
-}
-
-export async function searchVideos(
-  q: string,
-  signal?: AbortSignal
-): Promise<SearchResult[]> {
-  try {
-    const html = await fetchText(
-      `https://duckduckgo.com/?q=${encodeURIComponent(q)}&iax=videos&ia=videos`,
-      signal
-    );
-    const results: SearchResult[] = [];
-    const re =
-      /data-tn="([^"]+)"[^>]*>[\s\S]*?<a[^>]*href="([^"]+)"[^>]*>[\s\S]*?<img[^>]*src="([^"]+)"/g;
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(html)) !== null && results.length < 12) {
-      results.push({
-        title: decodeHtml(m[1]),
-        url: extractUrl(m[2]),
-        snippet: "",
-        thumbnail: m[3],
-      });
-    }
-    if (results.length > 0) return results;
-  } catch {
-    // fall through
-  }
-  return searchAll(`${q} video`, signal);
-}
-
-export async function searchNews(
-  q: string,
-  signal?: AbortSignal
-): Promise<SearchResult[]> {
-  return tryEach([ddg(q, "&iar=news"), lite(q, "&iar=news"), bing(q, "&setmkt=en-us&qft=interval%3d%227%22")], signal);
-}
-
-export async function searchShopping(
-  q: string,
-  signal?: AbortSignal
-): Promise<SearchResult[]> {
-  return tryEach(
-    [ddg(q + " buy", "&iar=products"), bing(q + " buy"), lite(q + " buy")],
-    signal
-  );
 }
 
 export const CATEGORY_META: Record<
   SearchCategory,
   { label: string; matcher: string }
 > = {
-  all: { label: "All", matcher: "searchAll" },
-  images: { label: "Images", matcher: "searchImages" },
-  videos: { label: "Videos", matcher: "searchVideos" },
-  news: { label: "News", matcher: "searchNews" },
-  shopping: { label: "Shopping", matcher: "searchShopping" },
+  all: { label: "All", matcher: "search" },
+  images: { label: "Images", matcher: "search" },
+  videos: { label: "Videos", matcher: "search" },
+  news: { label: "News", matcher: "search" },
+  shopping: { label: "Shopping", matcher: "search" },
 };

@@ -9,9 +9,10 @@ import {
   Loader2,
 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { SearchBar } from "@/components/search-bar";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { SearchCategory, SearchResult } from "@/lib/search";
 
@@ -29,34 +30,63 @@ export function SearchResults() {
   const cat = (sp.get("c") ?? "all") as SearchCategory;
 
   const [results, setResults] = useState<SearchResult[]>([]);
+  const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
+
+  const doFetch = useCallback(
+    async (targetPage: number, signal: AbortSignal) => {
+      const res = await fetch(
+        `/api/search?q=${encodeURIComponent(q)}&c=${cat}&page=${targetPage}`,
+        { signal }
+      );
+      const data = await res.json();
+      if (data.error) {
+        setError(data.error);
+        return;
+      }
+      setResults((prev) =>
+        targetPage === 0 ? data.results : [...prev, ...data.results]
+      );
+      setHasMore(data.hasMore);
+      setError(null);
+    },
+    [q, cat]
+  );
 
   useEffect(() => {
     if (!q) return;
+    setPage(0);
     setLoading(true);
     setError(null);
     const controller = new AbortController();
-    fetch(`/api/search?q=${encodeURIComponent(q)}&c=${cat}`, {
-      signal: controller.signal,
-    })
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.error) setError(data.error);
-        else setResults(data.results ?? []);
-      })
+    doFetch(0, controller.signal)
       .catch((e) => {
         if (e.name !== "AbortError") setError("Search request failed.");
       })
       .finally(() => setLoading(false));
     return () => controller.abort();
-  }, [q, cat]);
+  }, [q, cat, doFetch]);
+
+  function loadMore() {
+    const next = page + 1;
+    setPage(next);
+    setLoadingMore(true);
+    const controller = new AbortController();
+    doFetch(next, controller.signal)
+      .catch((e) => {
+        if (e.name !== "AbortError") setError("Search request failed.");
+      })
+      .finally(() => setLoadingMore(false));
+  }
 
   if (!q) {
     return (
-      <div className="text-muted-foreground flex flex-1 flex-col items-center justify-center gap-4">
-        <p>Enter a query to search.</p>
-        <div className="w-full max-w-2xl px-4">
+      <div className="flex flex-1 flex-col items-center justify-center gap-4 px-4">
+        <p className="text-muted-foreground">Enter a query to search.</p>
+        <div className="w-full max-w-2xl">
           <SearchBar />
         </div>
       </div>
@@ -67,15 +97,15 @@ export function SearchResults() {
     <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-6">
       <SearchBar defaultValue={q} />
 
-      <nav className="border-border mt-6 flex gap-1 overflow-x-auto border-b">
+      <nav className="mt-6 flex gap-1 overflow-x-auto border-b border-border">
         {CATEGORIES.map(({ key, label, icon: Icon }) => (
           <a
             key={key}
             href={`/search?q=${encodeURIComponent(q)}&c=${key}`}
             className={cn(
-              "text-muted-foreground hover:text-foreground flex items-center gap-2 rounded-t-md px-4 py-2 text-sm font-medium transition-colors",
+              "flex shrink-0 items-center gap-1.5 rounded-t-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground sm:px-4",
               cat === key &&
-                "text-primary border-primary border-b-2 hover:text-primary"
+                "border-b-2 border-primary text-primary hover:text-primary"
             )}
           >
             <Icon className="h-4 w-4" />
@@ -85,39 +115,37 @@ export function SearchResults() {
       </nav>
 
       {loading ? (
-        <div className="text-muted-foreground flex flex-col items-center gap-3 py-24">
+        <div className="flex flex-col items-center gap-3 py-24 text-muted-foreground">
           <Loader2 className="h-8 w-8 animate-spin" />
           <p className="text-sm">Searching for &quot;{q}&quot;...</p>
         </div>
       ) : error ? (
-        <div className="text-destructive py-24 text-center">
-          <p className="text-lg font-medium">{error}</p>
-          <p className="text-muted-foreground mt-2 text-sm">
-            The upstream search provider may be rate-limiting. Try again shortly.
+        <div className="py-24 text-center">
+          <p className="text-lg font-medium text-destructive">{error}</p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Try a different query or try again shortly.
           </p>
         </div>
       ) : results.length === 0 ? (
-        <div className="text-muted-foreground py-24 text-center">
+        <div className="py-24 text-center text-muted-foreground">
           <p className="text-lg font-medium">No results found.</p>
           <p className="mt-2 text-sm">Try different keywords.</p>
         </div>
       ) : (
-        <div className="mt-6 space-y-6">
-          <p className="text-muted-foreground text-sm">
-            {results.length} results for &quot;{q}&quot;
+        <div className="mt-6">
+          <p className="mb-4 text-sm text-muted-foreground">
+            {results.length} result{results.length === 1 ? "" : "s"} for &quot;{q}&quot;
           </p>
 
           {cat === "images" ? (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {results.map((r, i) => (
                 <a
                   key={i}
                   href={r.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
                   className="group overflow-hidden rounded-lg border border-border bg-card"
                 >
-                  <div className="bg-muted flex h-40 items-center justify-center overflow-hidden">
+                  <div className="flex h-36 items-center justify-center overflow-hidden bg-muted sm:h-40">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={r.thumbnail || r.url}
@@ -126,35 +154,46 @@ export function SearchResults() {
                       loading="lazy"
                     />
                   </div>
-                  <p className="text-card-foreground line-clamp-2 p-3 text-xs font-medium">
+                  <p className="line-clamp-2 p-2.5 text-xs font-medium text-card-foreground">
                     {r.title}
                   </p>
                 </a>
               ))}
             </div>
           ) : (
-            results.map((r, i) => (
-              <div key={i}>
-                <a
-                  href={r.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="group block"
-                >
-                  <p className="text-muted-foreground truncate text-xs">
-                    {r.url.replace(/^https?:\/\//, "")}
-                  </p>
-                  <h2 className="group-hover:text-primary text-foreground mt-0.5 text-lg leading-snug font-medium group-hover:underline">
-                    {r.title}
-                  </h2>
-                  {r.snippet && (
-                    <p className="text-muted-foreground mt-1 text-sm leading-relaxed">
-                      {r.snippet}
+            <div className="space-y-6">
+              {results.map((r, i) => (
+                <div key={i}>
+                  <a href={r.url} className="group block">
+                    <p className="truncate text-xs text-muted-foreground">
+                      {r.url.replace(/^https?:\/\//, "")}
                     </p>
-                  )}
-                </a>
-              </div>
-            ))
+                    <h2 className="mt-0.5 text-lg font-medium leading-snug text-foreground group-hover:text-primary group-hover:underline">
+                      {r.title}
+                    </h2>
+                    {r.snippet && (
+                      <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+                        {r.snippet}
+                      </p>
+                    )}
+                  </a>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {hasMore && (
+            <div className="mt-8 flex justify-center">
+              <Button
+                variant="outline"
+                onClick={loadMore}
+                disabled={loadingMore}
+                className="rounded-full px-8"
+              >
+                {loadingMore && <Loader2 className="h-4 w-4 animate-spin" />}
+                Load more
+              </Button>
+            </div>
           )}
         </div>
       )}
